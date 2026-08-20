@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex, nofollow" />
+<title>Reset your password — Win the Numbers</title>
+<style>
+  :root { color-scheme: light dark; --bg:#fff; --fg:#14161a; --muted:#5b6470;
+          --line:#e3e6ea; --accent:#1f6feb; --err:#b3261e; --ok:#1a7f37; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#14161a; --fg:#f2f4f7; --muted:#9aa4b2; --line:#2a2f37;
+            --accent:#589bff; --err:#ff6b60; --ok:#4ac26b; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:2rem 1.25rem; background:var(--bg); color:var(--fg);
+         font:16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 26rem; margin: 0 auto; }
+  h1 { font-size:1.4rem; margin:0 0 .35rem; }
+  p.sub { color:var(--muted); margin:0 0 1.6rem; }
+  label { display:block; font-weight:600; font-size:.9rem; margin:0 0 .35rem; }
+  input { width:100%; padding:.7rem .8rem; font-size:1rem; border:1px solid var(--line);
+          border-radius:8px; background:var(--bg); color:var(--fg); margin-bottom:1rem; }
+  button { width:100%; padding:.8rem; font-size:1rem; font-weight:600; border:0;
+           border-radius:8px; background:var(--accent); color:#fff; cursor:pointer; }
+  button[disabled] { opacity:.55; cursor:default; }
+  .msg { margin-top:1rem; padding:.75rem .85rem; border-radius:8px; font-size:.92rem; display:none; }
+  .msg.err { display:block; background:color-mix(in srgb, var(--err) 12%, transparent); color:var(--err); }
+  .msg.ok  { display:block; background:color-mix(in srgb, var(--ok) 12%, transparent); color:var(--ok); }
+  .hint { color:var(--muted); font-size:.85rem; margin:-.6rem 0 1rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Reset your password</h1>
+  <p class="sub">Choose a new password for your Win the Numbers account.</p>
+
+  <form id="f" autocomplete="off">
+    <label for="pw">New password</label>
+    <input id="pw" type="password" minlength="8" required autocomplete="new-password" />
+    <p class="hint">At least 8 characters.</p>
+
+    <label for="pw2">Confirm new password</label>
+    <input id="pw2" type="password" minlength="8" required autocomplete="new-password" />
+
+    <button id="go" type="submit">Update password</button>
+  </form>
+
+  <div id="m" class="msg"></div>
+</main>
+
+<script>
+(function () {
+  // Public, client-safe values: these already ship inside the mobile app bundle.
+  var SUPABASE_URL = "https://lkgndgbygomixfqhuulk.supabase.co";
+  var ANON_KEY = "sb_publishable_WQpGKYtUF4HTWmpE1xlVUg_mpr5C9km";
+
+  var form = document.getElementById("f");
+  var msg = document.getElementById("m");
+  var go = document.getElementById("go");
+
+  function show(kind, text) { msg.className = "msg " + kind; msg.textContent = text; }
+
+  // Supabase returns the recovery session in the URL FRAGMENT. Read it, then strip
+  // it from the address bar immediately so the token is not left sitting in the
+  // visible URL, in history, or in anything the user might copy/paste or screenshot.
+  var hash = window.location.hash.replace(/^#/, "");
+  var params = new URLSearchParams(hash);
+  var token = params.get("access_token");
+  var errDesc = params.get("error_description");
+  try {
+    history.replaceState(null, "", window.location.pathname + window.location.search);
+  } catch (e) { /* non-fatal */ }
+
+  if (errDesc) {
+    form.style.display = "none";
+    show("err", errDesc + " Request a new reset email from the app and open the newest link.");
+    return;
+  }
+  if (!token) {
+    form.style.display = "none";
+    show("err", "This page needs to be opened from the reset link in your email.");
+    return;
+  }
+
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var pw = document.getElementById("pw").value;
+    var pw2 = document.getElementById("pw2").value;
+
+    if (pw !== pw2) { show("err", "Those two passwords do not match."); return; }
+    if (pw.length < 8) { show("err", "Please use at least 8 characters."); return; }
+
+    go.disabled = true;
+    show("ok", "Updating…");
+
+    fetch(SUPABASE_URL + "/auth/v1/user", {
+      method: "PUT",
+      headers: {
+        "apikey": ANON_KEY,
+        "Authorization": "Bearer " + token,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ password: pw })
+    })
+      .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
+      .then(function (res) {
+        if (res.ok) {
+          form.style.display = "none";
+          show("ok", "Password updated. You can now sign in with your new password in the Win the Numbers app.");
+        } else {
+          go.disabled = false;
+          var m = (res.body && (res.body.msg || res.body.error_description || res.body.message)) ||
+                  "That did not work. Your reset link may have expired — request a new one from the app.";
+          show("err", m);
+        }
+      })
+      .catch(function () {
+        go.disabled = false;
+        show("err", "Network error. Please check your connection and try again.");
+      });
+  });
+})();
+</script>
+</body>
+</html>
